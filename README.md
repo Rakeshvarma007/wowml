@@ -1,4 +1,4 @@
-# WowML
+# WowML(Work in progress)
 
 A Python machine learning library powered by a custom C kernel, with built-in linear algebra and automatic differentiation.
 
