@@ -1,0 +1,12 @@
+build/
+dist/
+*.egg-info/
+*.so
+*.dll
+*.dylib
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

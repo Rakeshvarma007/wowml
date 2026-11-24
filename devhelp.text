@@ -1,0 +1,388 @@
+================================================================================
+WOWML DEVELOPER ONBOARDING & IMPLEMENTATION GUIDE (devhelp.text)
+================================================================================
+
+Welcome to WowML! This document gives you all the technical context and instructions
+you need to pick up development immediately, even if you are entirely new to the project.
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. PROJECT OVERVIEW & ARCHITECTURE
+2. WHAT WAS ALREADY COMPLETED & HOW
+3. WHAT NEEDS TO BE DONE & HOW (STEP-BY-STEP IMPLEMENTATION GUIDE)
+4. ENVIRONMENT SETUP & BUILD WORKFLOW
+5. CRITICAL DESIGN RULES & CONVENTIONS
+6. QUICK REFERENCE: FILE MAP & ROLES
+
+================================================================================
+1. PROJECT OVERVIEW & ARCHITECTURE
+================================================================================
+
+WowML is an educational, production-structured machine learning library written
+from scratch in Python with a high-performance C kernel. It follows a modular design
+reminiscent of PyTorch, organized into three primary layers:
+
+Layer 3: Python User API (`wowml/`)
+  - `wowml.tensor.Tensor`: High-level multi-dimensional array object.
+  - `wowml.nn`: Modular layers (`Linear`, `Conv2d`), activations, losses, containers.
+  - `wowml.optim`: Optimization algorithms (`SGD`, `Adam`).
+  - `wowml.linalg`: Linear algebra decompositions (`lu`, `qr`, `svd`, `cholesky`),
+    solvers, and matrix queries.
+  - `wowml.data`: `Dataset` and `DataLoader` abstractions.
+
+Layer 2: Autograd Engine (`wowml/autograd/`)
+  - Reverse-mode automatic differentiation over a dynamic computational DAG.
+  - Operates via `Function.apply(*args)`: records nodes, captures inputs for backward,
+    and walks nodes in reverse topological order during `.backward()`.
+
+Layer 1: Python/C Bridge (`wowml/_C/`)
+  - Uses standard library `ctypes` to dynamically load `wowml_c.dll` (Windows),
+    `libwowml_c.so` (Linux), or `libwowml_c.dylib` (macOS).
+  - Translates Python memory buffers to C structures without third-party heavy dependencies.
+
+Layer 0: C Kernel (`csrc/`)
+  - Written in C11. Manages raw byte allocation, row-major striding, memory layout,
+    element-wise mathematical ops, matrix multiplication, and linear algebra routines.
+
+================================================================================
+2. WHAT WAS ALREADY COMPLETED & HOW
+================================================================================
+
+The complete foundational scaffolding, build pipeline, public C headers, Python
+module structure, test skeletons, and project roadmap have been built.
+
+1. Build & Packaging Configuration:
+   - `CMakeLists.txt`: Configured for CMake 3.20+, builds `csrc/src/*.c` into a shared
+     library (`wowml_c`), links headers from `csrc/include/`, and optionally compiles C tests.
+   - `setup.py`: Integrates `build_ext` with CMake to auto-compile the C kernel during
+     `pip install -e .`.
+   - `pyproject.toml`: Modern packaging definition specifying setuptools backend and dev dependencies.
+   - `Makefile`: Convenience targets (`make build`, `make test`, `make test-c`, `make dev`).
+
+2. C Kernel Headers & Core Data Structures (`csrc/include/wowml/`):
+   - `tensor.h`: Defines `wowml_tensor_t` with shape array, strides, numel, dtype, data pointer,
+     and memory ownership flags (`owns_data`). Supports up to 8 dimensions (`WOWML_MAX_DIMS = 8`).
+   - `dtype.h`: Enum definitions for `WOWML_FLOAT32`, `WOWML_FLOAT64`, `WOWML_INT32`, `WOWML_INT64`.
+   - `error.h`: Status codes (`WOWML_OK`, `WOWML_ERR_NULL_PTR`, `WOWML_ERR_SHAPE_MISMATCH`, etc.)
+     and error callback hooks.
+   - `memory.h`: Pluggable memory allocator interface (`wowml_alloc`, `wowml_calloc`, `wowml_free`).
+   - `ops.h`: Declarations for element-wise arithmetic, unary math, scalar ops, and reductions.
+   - `matmul.h`: Declarations for `wowml_matmul` (2D), `wowml_bmm` (3D batched), `wowml_matvec`, and `wowml_dot`.
+   - `linalg.h`: Declarations for LU, QR, SVD, Cholesky, Eigh, solvers (`solve`, `inv`), and queries (`det`, `trace`, `norm`).
+
+3. C Kernel Baseline Implementation (`csrc/src/`):
+   - `memory.c`: Implemented default malloc/calloc/free wrapping with swappable function pointers.
+   - `dtype.c`: Implemented byte sizing and type name lookups.
+   - `error.c`: Implemented error string resolution and custom handler registration.
+   - `tensor.c`: Implemented `wowml_tensor_alloc` (calculates row-major contiguous strides and
+     allocates memory buffer), `wowml_tensor_free`, `wowml_tensor_zeros`, and `wowml_tensor_print`.
+   - `ops.c`, `matmul.c`, `linalg.c`: Function stubs with complete signatures and documentation.
+
+4. Python Package Scaffolding (`wowml/`):
+   - `_C/_bindings.py`: Cross-platform shared library resolver and `ctypes.CDLL` loader.
+   - `tensor.py`: `Tensor` class with properties (`shape`, `ndim`, `numel`, `grad`, `requires_grad`)
+     and magic method hooks (`__add__`, `__mul__`, `__matmul__`, etc.).
+   - `autograd/`: Core reverse-mode autodiff design in `engine.py` (topological sort),
+     `function.py` (base `Function` with `save_for_backward`), and `grad_ops.py` (op classes).
+   - `linalg/`: Python wrappers for matrix operations (`decompositions.py`, `solve.py`, `norms.py`).
+   - `nn/`: PyTorch-compatible OOP layout with `Module`, `Parameter`, `Linear`, `Conv2d`, activations,
+     losses (`MSELoss`, `CrossEntropyLoss`), and containers (`Sequential`, `ModuleList`).
+   - `optim/`: Optimizer base class, `SGD` (with momentum), and `Adam` (with moment buffers).
+   - `data/`: `Dataset` and `DataLoader` batching/shuffling classes.
+   - `utils/`: `save` and `load` serialization utilities.
+
+5. Tests & Documentation:
+   - `tests/`: Pytest suites for tensor creation, autograd verification, linear algebra, nn, and optim.
+   - `csrc/tests/`: C unit test harnesses (`test_tensor.c`, `test_linalg.c`).
+   - `docs/architecture.md`: Complete architecture guide and dataflow diagram.
+   - `tasks.md`: Detailed master checklist for all phases.
+
+================================================================================
+3. WHAT NEEDS TO BE DONE & HOW (STEP-BY-STEP IMPLEMENTATION GUIDE)
+================================================================================
+
+Follow this roadmap strictly in order. Each phase depends on the previous phase.
+
+--------------------------------------------------------------------------------
+PHASE 1: COMPLETE THE C KERNEL
+--------------------------------------------------------------------------------
+
+Goal: Make the C library standalone, correct, and testable without Python.
+
+1. Tensor Core (`csrc/src/tensor.c`):
+   - Implement `wowml_tensor_ones`: Call `wowml_tensor_alloc`, loop through `numel`,
+     cast pointer based on `dtype`, and set each element to 1.0.
+   - Implement `wowml_tensor_fill`: Same as `ones`, but write the user's `double value`.
+   - Implement `wowml_tensor_clone`: Allocate destination tensor with identical shape/dtype,
+     then `memcpy(dst->data, src->data, nbytes)`.
+   - Implement `wowml_tensor_set_flat` and `wowml_tensor_get_flat`: Direct indexed access
+     with boundary check (`idx >= 0 && idx < t->numel`) and dtype switch.
+   - Implement `wowml_tensor_reshape`: Validate that product of `new_shape` equals `t->numel`.
+     Update `t->shape` and recompute row-major `t->strides`.
+
+2. Element-wise Math & Reductions (`csrc/src/ops.c`):
+   - Create a type-dispatch macro:
+     #define DISPATCH_FLOAT(dtype, TYPE, CODE) ...
+   - Implement contiguous binary loops:
+     For inputs `a` and `b` with identical shapes:
+       `for (int64_t i = 0; i < out->numel; ++i) out[i] = a[i] + b[i];`
+   - Implement unary operations:
+     `wowml_neg`, `wowml_relu` (`fmax(0.0, x)`), `wowml_sigmoid` (`1.0 / (1.0 + exp(-x))`),
+     `wowml_tanh_op`, `wowml_exp`, `wowml_log`, `wowml_sqrt`, `wowml_pow_op`.
+   - Implement reductions (`wowml_sum`, `wowml_mean`):
+     Support `axis = -1` (full reduction across all elements into scalar output).
+     For specific axis: compute stride jumps to accumulate along the target dimension.
+
+3. Matrix Multiplication (`csrc/src/matmul.c`):
+   - Implement `wowml_matmul(out, a, b)`:
+     1. Verify `a->ndim == 2` and `b->ndim == 2`.
+     2. Check dimension match: `a->shape[1] == b->shape[0]`.
+     3. Ensure `out` has shape `[a->shape[0], b->shape[1]]`.
+     4. Start with canonical 3-loop algorithm:
+        for i in 0..M:
+          for k in 0..K:
+            for j in 0..N:
+              C[i*N + j] += A[i*K + k] * B[k*N + j]
+     5. (Optional optimization): Add loop tiling / cache-blocking (`BLOCK_SIZE = 32`).
+
+4. Linear Algebra Decompositions & Solvers (`csrc/src/linalg.c`):
+   - `wowml_linalg_lu`: Implement Doolittle algorithm with partial pivoting.
+     Keep track of row permutations in `int64_t* piv`.
+   - `wowml_linalg_solve`: Solve `Ax = b` by forward substitution on `L (y) = Pb`,
+     followed by backward substitution on `U (x) = y`.
+   - `wowml_linalg_inv`: Solve `A * X = I` by running `wowml_linalg_solve` against identity matrix columns.
+   - `wowml_linalg_det`: Compute product of diagonal elements of `U` after LU factoring,
+     multiplied by `(-1)^num_row_swaps`.
+   - `wowml_linalg_cholesky`: For symmetric positive-definite matrices `A`, compute `L` such that `A = L * L^T`:
+     `L[j][j] = sqrt(A[j][j] - sum(L[j][k]^2))`
+     `L[i][j] = (A[i][j] - sum(L[i][k] * L[j][k])) / L[j][j]`
+   - `wowml_linalg_qr`: Householder reflection method to obtain orthogonal `Q` and upper-triangular `R`.
+   - `wowml_linalg_svd`: Golub-Kahan bidiagonalization or Jacobi one-sided SVD.
+
+5. Verify Phase 1:
+   - Run C unit tests: `cd build && ctest --output-on-failure`.
+
+--------------------------------------------------------------------------------
+PHASE 2: CTYPES PYTHON-TO-C BINDINGS
+--------------------------------------------------------------------------------
+
+Goal: Allow Python code to allocate C tensors and trigger C computations seamlessly.
+
+1. Define C Types in `wowml/_C/_bindings.py`:
+   - Map `wowml_tensor_t` as `ctypes.Structure`:
+     ```python
+     class CWowmlTensor(ctypes.Structure):
+         _fields_ = [
+             ("data", ctypes.c_void_p),
+             ("dtype", ctypes.c_int),
+             ("ndim", ctypes.c_int),
+             ("shape", ctypes.c_int64 * 8),
+             ("strides", ctypes.c_int64 * 8),
+             ("numel", ctypes.c_int64),
+             ("owns_data", ctypes.c_int),
+         ]
+     ```
+   - Register `argtypes` and `restype` on `lib.wowml_tensor_alloc`, `lib.wowml_add`,
+     `lib.wowml_matmul`, etc.
+   - Write a helper `check_status(status_code)` that raises `RuntimeError` if status != 0.
+
+2. Upgrade `wowml.tensor.Tensor` (`wowml/tensor.py`):
+   - Store `self._c_tensor = CWowmlTensor()`.
+   - In `__init__`, if given a Python list or float, allocate with `lib.wowml_tensor_alloc`
+     and copy elements into `self._c_tensor.data` via `ctypes.memmove` or typed pointers.
+   - Implement `Tensor.zeros(*shape)` calling `lib.wowml_tensor_zeros`.
+   - Implement `Tensor.ones(*shape)` calling `lib.wowml_tensor_ones`.
+   - Implement `numpy()` / `tolist()` methods to extract data back to Python.
+   - In `__del__`, call `lib.wowml_tensor_free(ctypes.byref(self._c_tensor))`.
+
+--------------------------------------------------------------------------------
+PHASE 3: AUTOGRAD ENGINE
+--------------------------------------------------------------------------------
+
+Goal: Automatic gradient computation for any computational graph of Tensors.
+
+1. Base Function Mechanics (`wowml/autograd/function.py`):
+   - When `Function.apply(*args)` is invoked:
+     - Check if any input Tensor has `requires_grad=True`.
+     - Execute `fn.forward(*args)`.
+     - If requires_grad is True, save inputs/outputs as needed (`fn.save_for_backward(...)`),
+       set `result._grad_fn = fn`, and store parent inputs in `fn.inputs`.
+
+2. Reverse-Mode Traversal (`wowml/autograd/engine.py`):
+   - In `backward(tensor, gradient=None)`:
+     - If `gradient` is None: require `tensor.numel == 1` and initialize `grad = Tensor([1.0])`.
+     - Build reverse topological sort via DFS on `t._grad_fn`.
+     - Iterate through sorted nodes:
+       - Call `grads = node.backward(current_grad)`.
+       - For each parent tensor and computed gradient:
+         - If parent is a leaf (`_grad_fn is None`) and `requires_grad=True`:
+           accumulate gradient into `parent.grad` (summing if already present).
+         - If non-leaf, pass gradient down to earlier nodes.
+
+3. Complete Gradient Ops (`wowml/autograd/grad_ops.py`):
+   - `Add`: `backward(grad)` -> `(grad, grad)`
+   - `Sub`: `backward(grad)` -> `(grad, -grad)`
+   - `Mul`: `backward(grad)` -> `(grad * b, grad * a)`
+   - `Div`: `backward(grad)` -> `(grad / b, -grad * a / (b ** 2))`
+   - `MatMul`: `backward(grad)` -> `(grad @ b.T, a.T @ grad)`
+   - `ReLU`: `backward(grad)` -> `grad * (x > 0)`
+   - `Sigmoid`: `backward(grad)` -> `grad * s * (1 - s)`
+   - `Sum`: `backward(grad)` -> expand `grad` to input shape.
+
+4. Connect Magic Methods on `Tensor`:
+   - `__add__` calls `grad_ops.Add.apply(self, other)`.
+   - `__mul__` calls `grad_ops.Mul.apply(self, other)`.
+   - `__matmul__` calls `grad_ops.MatMul.apply(self, other)`.
+   - `.backward()` calls `wowml.autograd.engine.backward(self)`.
+
+--------------------------------------------------------------------------------
+PHASE 4: LINEAR ALGEBRA PYTHON LAYER
+--------------------------------------------------------------------------------
+
+Goal: Expose C decompositions cleanly in Python.
+
+1. Implement `wowml/linalg/decompositions.py`:
+   - `lu(A)`: Allocates C output tensors for L and U, calls `lib.wowml_linalg_lu`, returns `(L, U)`.
+   - `qr(A)`: Returns `(Q, R)`.
+   - `svd(A)`: Returns `(U, S, Vt)`.
+   - `cholesky(A)`: Returns lower-triangular `L`.
+2. Implement `wowml/linalg/solve.py`:
+   - `solve(A, b)`: Returns solution tensor `x`.
+   - `inv(A)`: Returns inverted matrix.
+3. Implement `wowml/linalg/norms.py`:
+   - Expose `norm(A, ord=2)`, `det(A)`, `trace(A)`.
+
+--------------------------------------------------------------------------------
+PHASE 5: NEURAL NETWORKS (`wowml.nn`)
+--------------------------------------------------------------------------------
+
+Goal: Enable modular deep learning model construction.
+
+1. `Module` & `Parameter` (`module.py`, `parameter.py`):
+   - Ensure `Parameter` is a `Tensor` subclass with `requires_grad=True`.
+   - `Module.__setattr__` registers any `Parameter` into `self._parameters`
+     and any child `Module` into `self._modules`.
+   - `parameters()` recursively yields all parameters from all submodules.
+   - `zero_grad()` iterates through all parameters and clears `.grad = None`.
+
+2. Layers:
+   - `Linear(in_features, out_features, bias=True)`:
+     Initialize weights with standard normal scaled by `sqrt(2 / in_features)` (He initialization).
+     In `forward(x)`: compute `x @ self.weight.T + self.bias`.
+   - `Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=0)`:
+     Implement forward pass via im2col transformation followed by `MatMul`.
+
+3. Loss Functions:
+   - `MSELoss`: `((pred - target) ** 2).mean()`.
+   - `CrossEntropyLoss`: `log_softmax` followed by negative log likelihood.
+
+--------------------------------------------------------------------------------
+PHASE 6: OPTIMIZERS (`wowml.optim`)
+--------------------------------------------------------------------------------
+
+Goal: Update weights using accumulated gradients.
+
+1. `SGD(params, lr=0.01, momentum=0.0, weight_decay=0.0)`:
+   - In `step()`:
+     For parameter `p` with gradient `g = p.grad`:
+       If `weight_decay != 0`: `g = g + weight_decay * p.data`
+       If `momentum != 0`:
+         `v = momentum * state[p]['velocity'] + g`
+         `update = v`
+       Else:
+         `update = g`
+       `p.data = p.data - lr * update`
+
+2. `Adam(params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0)`:
+   - Track iteration step `t`, first moment `m`, second moment `v` per parameter.
+   - Update:
+     `m = beta1 * m + (1 - beta1) * g`
+     `v = beta2 * v + (1 - beta2) * (g ** 2)`
+     `m_hat = m / (1 - beta1 ** t)`
+     `v_hat = v / (1 - beta2 ** t)`
+     `p.data = p.data - lr * m_hat / (sqrt(v_hat) + eps)`
+
+--------------------------------------------------------------------------------
+PHASE 7: VERIFICATION & EXAMPLES
+--------------------------------------------------------------------------------
+
+1. Numerical Gradient Checker (`tests/test_autograd.py`):
+   - Compare autograd gradients against finite differences:
+     `numerical_grad = (f(x + eps) - f(x - eps)) / (2 * eps)`
+   - Assert `abs(autograd_grad - numerical_grad) < 1e-4`.
+
+2. Runnable Examples:
+   - `examples/linear_regression.py`: Synthetic dataset `y = 3x + 2`, train 100 epochs,
+     verify MSE loss approaches 0.0.
+   - `examples/mnist.py`: 2-layer MLP on MNIST digits.
+
+================================================================================
+4. ENVIRONMENT SETUP & BUILD WORKFLOW
+================================================================================
+
+Prerequisites:
+  - C Compiler: MSVC (Visual Studio / Build Tools on Windows), GCC, or Clang.
+  - CMake 3.20+
+  - Python 3.9+ with virtualenv, pytest, and numpy (for test comparisons).
+
+Step 1: Build the C Kernel directly:
+  mkdir build
+  cd build
+  cmake .. -DBUILD_TESTS=ON
+  cmake --build . --config Release
+
+Step 2: Run C unit tests:
+  ctest --output-on-failure
+
+Step 3: Install WowML in editable mode (auto-builds C kernel and places binary in wowml/_C/):
+  pip install -e ".[dev]"
+
+Step 4: Run Python test suite:
+  pytest tests/ -v
+
+================================================================================
+5. CRITICAL DESIGN RULES & CONVENTIONS
+================================================================================
+
+1. Memory Ownership:
+   - When a `wowml_tensor_t` is allocated, `owns_data` is set to 1.
+   - If a Python `Tensor` wraps an existing buffer without copying, set `owns_data = 0`
+     so the C layer does not double-free memory owned by Python/NumPy.
+   - Always ensure `wowml_tensor_free` handles `NULL` pointers safely without crashing.
+
+2. Autograd Graph Invariance:
+   - Never modify tensors in-place during backward passes.
+   - Any tensor with `requires_grad=False` should NOT be added to the computation graph.
+   - Always clear gradients with `optimizer.zero_grad()` or `tensor.zero_grad()` between iterations.
+
+3. Shape and Strides:
+   - Default layout is contiguous row-major:
+     `strides[ndim - 1] = 1`
+     `strides[i] = strides[i + 1] * shape[i + 1]`
+   - Always validate non-negative shapes and `ndim <= 8`.
+
+================================================================================
+6. QUICK REFERENCE: FILE MAP & ROLES
+================================================================================
+
+csrc/include/wowml/tensor.h  -> C tensor definition & lifecycle signatures
+csrc/include/wowml/ops.h     -> C math ops & reductions signatures
+csrc/include/wowml/matmul.h  -> C matmul signatures
+csrc/include/wowml/linalg.h  -> C linear algebra signatures
+csrc/src/tensor.c            -> C tensor allocation, strides, and memory freeing
+csrc/src/ops.c               -> C element-wise arithmetic & unary math
+csrc/src/matmul.c            -> C matrix multiplication
+csrc/src/linalg.c            -> C LU, QR, SVD, Cholesky, and solvers
+wowml/_C/_bindings.py        -> ctypes loader and wrapper around wowml_c shared lib
+wowml/tensor.py              -> Python user-facing Tensor class
+wowml/autograd/engine.py     -> Reverse-mode autodiff engine (topological sort)
+wowml/autograd/function.py   -> Base differentiable Function class
+wowml/autograd/grad_ops.py   -> Forward/backward gradient definitions
+wowml/linalg/                -> Python linear algebra subpackage
+wowml/nn/                    -> Modules, parameters, linear/conv layers, loss, activations
+wowml/optim/                 -> SGD, Adam optimizers
+wowml/data/                  -> Dataset, DataLoader
+tests/                       -> Pytest test suite
+tasks.md                     -> Master implementation checklist
+================================================================================
