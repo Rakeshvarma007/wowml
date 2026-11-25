@@ -1,330 +1,255 @@
-# WowML — Implementation Tasks
+# WowML — 14-Day Full-Scope Engineering Masterplan
 
-> Master checklist of everything to implement and connect.
-> Work through the phases in order — each phase builds on the previous one.
-
----
-
-## Phase 1: C Kernel Foundation
-
-The C layer is the performance backbone. Everything else calls into it.
-
-### 1.1 Memory & Types (`csrc/src/memory.c`, `csrc/src/dtype.c`)
-- [x] `wowml_alloc` / `wowml_calloc` / `wowml_free` — basic allocator wrapper
-- [x] `wowml_dtype_size` / `wowml_dtype_name` — dtype helpers
-- [x] `wowml_set_allocator` — pluggable allocator
-- [ ] Add aligned allocation (`_aligned_malloc` / `posix_memalign`) for SIMD
-- [ ] Add allocation tracking / debug leak checker
-
-### 1.2 Tensor Core (`csrc/src/tensor.c`)
-- [x] `wowml_tensor_alloc` — allocate data buffer with row-major strides
-- [x] `wowml_tensor_free` — free tensor data
-- [x] `wowml_tensor_zeros` — allocate + zero-fill
-- [x] `wowml_tensor_print` — debug printing
-- [ ] `wowml_tensor_ones` — allocate + fill with 1.0 (dtype-aware loop)
-- [ ] `wowml_tensor_fill` — fill with arbitrary scalar value
-- [ ] `wowml_tensor_clone` — deep copy (alloc + memcpy)
-- [ ] `wowml_tensor_set_flat` / `wowml_tensor_get_flat` — flat-index element access with dtype dispatch
-- [ ] `wowml_tensor_reshape` — validate numel match, update shape/strides in-place
-- [ ] `wowml_tensor_transpose` — swap strides for 2-D; generalize for N-D
-- [ ] Add `wowml_tensor_from_data` — wrap external buffer (non-owning)
-- [ ] Add strided iteration helpers (for non-contiguous views)
-
-### 1.3 Element-wise Ops (`csrc/src/ops.c`)
-- [ ] Implement dtype dispatch macro (switch on `dtype`, cast `data` to typed pointer)
-- [ ] `wowml_add` / `wowml_sub` / `wowml_mul` / `wowml_div` — element-wise binary ops
-- [ ] `wowml_add_scalar` / `wowml_mul_scalar` — scalar broadcast ops
-- [ ] `wowml_neg` — negate all elements
-- [ ] `wowml_exp` / `wowml_log` / `wowml_sqrt` / `wowml_pow_op` — math unary ops
-- [ ] `wowml_relu` — max(0, x) element-wise
-- [ ] `wowml_sigmoid` — 1/(1+exp(-x))
-- [ ] `wowml_tanh_op` — tanh(x)
-- [ ] `wowml_sum` / `wowml_mean` / `wowml_max` / `wowml_min` — axis reductions
-- [ ] `wowml_equal` — element-wise comparison
-- [ ] **Broadcasting engine** — shape compatibility check + virtual stride expansion
-
-### 1.4 Matrix Multiplication (`csrc/src/matmul.c`)
-- [ ] `wowml_dot` — 1-D dot product
-- [ ] `wowml_matvec` — matrix × vector
-- [ ] `wowml_matmul` — 2-D matrix × matrix (naive triple loop first)
-- [ ] `wowml_bmm` — batched matmul for 3-D tensors
-- [ ] **Optimization pass**: tiled matmul with cache-friendly blocking
-- [ ] **Optimization pass**: SIMD intrinsics (SSE/AVX) for inner loop
-
-### 1.5 Linear Algebra (`csrc/src/linalg.c`)
-- [ ] `wowml_linalg_trace` — sum of diagonal elements
-- [ ] `wowml_linalg_norm` — L1, L2, Linf norms
-- [ ] `wowml_linalg_lu` — Doolittle LU with partial pivoting
-- [ ] `wowml_linalg_det` — determinant via LU
-- [ ] `wowml_linalg_solve` — forward/backward substitution after LU
-- [ ] `wowml_linalg_inv` — inverse via LU or Gauss-Jordan
-- [ ] `wowml_linalg_cholesky` — Cholesky-Banachiewicz for SPD matrices
-- [ ] `wowml_linalg_qr` — Householder QR decomposition
-- [ ] `wowml_linalg_eigh` — Jacobi eigenvalue algorithm for symmetric matrices
-- [ ] `wowml_linalg_svd` — Golub-Kahan bidiagonalization + QR iteration
-
-### 1.6 Error Handling (`csrc/src/error.c`)
-- [x] `wowml_status_string` — status code to string
-- [x] `wowml_set_error_handler` — custom callback
-- [ ] Add `WOWML_CHECK(expr, status)` macro for internal assertions
-- [ ] Wire error handler into all functions (call handler on failure)
-
-### 1.7 C Tests (`csrc/tests/`)
-- [ ] `test_tensor.c` — alloc/free, zeros/ones/fill, clone, set/get, reshape, transpose
-- [ ] `test_linalg.c` — test each decomposition against known matrices
-- [ ] Add `test_ops.c` — element-wise ops, broadcasting, reductions
-- [ ] Add `test_matmul.c` — dot, matvec, matmul, bmm correctness
+> **Status**: Full skeleton and documentation refactored. Ready for Phase-by-Phase implementation.
+> **Constraint**: Zero scope cuts. All layers (C11 + BLAS kernel, autograd, linalg, nn, optim, data, utils, benchmarks) are included.
 
 ---
 
-## Phase 2: Python ↔ C Bindings
+## Day 1: Memory Subsystem, SIMD Alignment, and Error Handling
 
-Bridge the C kernel to Python so every Python op runs C code.
+- [ ] **1.1 Status Codes & Error Assertion Macros**
+  - Path: [`csrc/include/wowml/error.h`](file:///c:/vs_code/wowml/csrc/include/wowml/error.h), [`csrc/src/error.c`](file:///c:/vs_code/wowml/csrc/src/error.c)
+  - Tasks: Implement `wowml_status_string()` for all codes including `WOWML_ERR_NOT_IMPLEMENTED`. Verify `WOWML_CHECK(expr, status)` macro.
+  - Acceptance Criteria: Invalid argument checks correctly return appropriate error codes without aborting.
 
-### 2.1 ctypes Bindings (`wowml/_C/_bindings.py`)
-- [ ] Define `ctypes.Structure` for `wowml_tensor_t` matching the C struct layout
-- [ ] Declare argtypes/restype for every C function in `lib`
-- [ ] Wrap `wowml_tensor_alloc`, `wowml_tensor_free`, `wowml_tensor_zeros`, `wowml_tensor_ones`
-- [ ] Wrap all ops: `wowml_add`, `wowml_sub`, `wowml_mul`, `wowml_div`, etc.
-- [ ] Wrap `wowml_matmul`, `wowml_dot`, `wowml_matvec`, `wowml_bmm`
-- [ ] Wrap all linalg functions
-- [ ] Add error-checking wrapper: check return status, raise Python exception on error
-- [ ] Support data transfer: Python list/numpy → C buffer and back
+- [ ] **1.2 SIMD 64-Byte Aligned Allocation**
+  - Path: [`csrc/include/wowml/memory.h`](file:///c:/vs_code/wowml/csrc/include/wowml/memory.h), [`csrc/src/memory.c`](file:///c:/vs_code/wowml/csrc/src/memory.c)
+  - Tasks: Implement `wowml_aligned_alloc` using `_aligned_malloc` on Windows and `posix_memalign` on POSIX. Implement matching `wowml_aligned_free`.
+  - Acceptance Criteria: Returned pointers are 64-byte aligned (`(uintptr_t)ptr % 64 == 0`).
 
-### 2.2 Python Tensor backed by C (`wowml/tensor.py`)
-- [ ] Store a `wowml_tensor_t` ctypes struct instead of Python lists
-- [ ] Implement `Tensor.__init__` — accept list/nested-list, allocate C tensor, copy data in
-- [ ] Implement `shape`, `ndim`, `numel` properties from the C struct
-- [ ] Implement `Tensor.zeros()`, `Tensor.ones()`, `Tensor.randn()` factories via C calls
-- [ ] Implement `to_list()` / `to_numpy()` — read data back from C buffer
-- [ ] Implement `__repr__` with actual data display
-- [ ] Implement `__del__` to call `wowml_tensor_free`
+- [ ] **1.3 Memory Arena / Scratch Allocator**
+  - Path: [`csrc/include/wowml/memory.h`](file:///c:/vs_code/wowml/csrc/include/wowml/memory.h), [`csrc/src/memory.c`](file:///c:/vs_code/wowml/csrc/src/memory.c)
+  - Tasks: Implement `wowml_arena_init`, `wowml_arena_alloc` (aligned bump pointer), `wowml_arena_reset`, and `wowml_arena_destroy`.
+  - Acceptance Criteria: Temporary allocations run without calling global heap malloc in inner loops.
 
 ---
 
-## Phase 3: Autograd Engine
+## Day 2: Tensor Lifecycle, N-D Strides, and Zero-Copy Views
 
-Reverse-mode automatic differentiation on top of the C-backed tensors.
+- [ ] **2.1 Contiguous Tensor Allocation**
+  - Path: [`csrc/include/wowml/tensor.h`](file:///c:/vs_code/wowml/csrc/include/wowml/tensor.h), [`csrc/src/tensor.c`](file:///c:/vs_code/wowml/csrc/src/tensor.c)
+  - Tasks: Implement `wowml_tensor_alloc`, `wowml_tensor_free`, `wowml_tensor_from_data`, `wowml_tensor_zeros`, `wowml_tensor_ones`, and `wowml_tensor_fill`.
+  - Acceptance Criteria: Correct row-major stride calculations for 1D through 8D tensors; `owns_data` respected on free.
 
-### 3.1 Computation Graph (`wowml/autograd/function.py`)
-- [ ] Finalize `Function.apply()` — only wire graph when any input has `requires_grad`
-- [ ] Handle mix of Tensor and scalar inputs gracefully
-- [ ] Implement `no_grad()` context manager to disable graph recording
+- [ ] **2.2 Tensor Cloning & Flat Accessors**
+  - Path: [`csrc/src/tensor.c`](file:///c:/vs_code/wowml/csrc/src/tensor.c)
+  - Tasks: Implement `wowml_tensor_clone`, `wowml_tensor_set_flat`, and `wowml_tensor_get_flat`.
+  - Acceptance Criteria: Deep copy creates an independent buffer; flat get/set operates across all supported dtypes.
 
-### 3.2 Engine (`wowml/autograd/engine.py`)
-- [ ] Implement `_topological_sort` — DFS-based reverse topological ordering
-- [ ] Implement `backward()`:
-  - Seed gradient (ones_like if scalar output, or user-provided)
-  - Walk topo order, call `_grad_fn.backward()`
-  - Accumulate `.grad` on leaf tensors (sum if multiple paths)
-- [ ] Handle in-place grad accumulation (+=) correctly
-- [ ] Add cycle detection / error on non-DAG graphs
-
-### 3.3 Gradient Ops (`wowml/autograd/grad_ops.py`)
-Implement `forward()` and `backward()` for each:
-- [ ] `Add` — forward: C `wowml_add`; backward: pass-through
-- [ ] `Sub` — forward: C `wowml_sub`; backward: (grad, -grad)
-- [ ] `Mul` — forward: C `wowml_mul`; backward: (grad*b, grad*a)
-- [ ] `Div` — forward: C `wowml_div`; backward: (grad/b, -grad*a/b²)
-- [ ] `Neg` — forward: C `wowml_neg`; backward: -grad
-- [ ] `MatMul` — forward: C `wowml_matmul`; backward: (grad@B^T, A^T@grad)
-- [ ] `Pow` — forward: C `wowml_pow_op`; backward: n*x^(n-1)*grad
-- [ ] `Sqrt` — backward: grad / (2*sqrt(x))
-- [ ] `Exp` — backward: exp(x) * grad
-- [ ] `Log` — backward: grad / x
-- [ ] `ReLU` — backward: grad * (x > 0)
-- [ ] `Sigmoid` — backward: grad * σ(x) * (1 - σ(x))
-- [ ] `Tanh` — backward: grad * (1 - tanh²(x))
-- [ ] `Sum` — backward: broadcast grad to input shape
-- [ ] `Mean` — backward: grad / numel, broadcast
-- [ ] `Reshape` — backward: reshape grad to original shape
-- [ ] `Transpose` — backward: transpose grad back
-
-### 3.4 Wire Tensor operators to Autograd
-- [ ] `Tensor.__add__` → `Add.apply(self, other)`
-- [ ] `Tensor.__sub__` → `Sub.apply(self, other)`
-- [ ] `Tensor.__mul__` → `Mul.apply(self, other)`
-- [ ] `Tensor.__truediv__` → `Div.apply(self, other)`
-- [ ] `Tensor.__matmul__` → `MatMul.apply(self, other)`
-- [ ] `Tensor.__neg__` → `Neg.apply(self)`
-- [ ] `Tensor.sum()` → `Sum.apply(self)`
-- [ ] `Tensor.mean()` → `Mean.apply(self)`
-- [ ] `Tensor.reshape()` → `Reshape.apply(self, shape)`
-- [ ] `Tensor.backward()` → `autograd.engine.backward(self)`
-- [ ] Handle `__radd__`, `__rmul__`, etc. for scalar-tensor ops
-- [ ] `Tensor.detach()` — return copy with `requires_grad=False`, no `_grad_fn`
-
-### 3.5 Graph Utilities (`wowml/autograd/graph.py`)
-- [ ] `trace_graph` — walk graph, print node names and shapes
-- [ ] `count_parameters` — count leaf tensors with `requires_grad`
+- [ ] **2.3 Zero-Copy Reshape and Transposition**
+  - Path: [`csrc/src/tensor.c`](file:///c:/vs_code/wowml/csrc/src/tensor.c)
+  - Tasks: Implement `wowml_tensor_is_contiguous`, `wowml_tensor_contiguous` (buffer compaction), `wowml_tensor_reshape`, and `wowml_tensor_transpose`.
+  - Acceptance Criteria: `transpose` swaps strides without copying data; `contiguous` creates a packed copy only when needed.
 
 ---
 
-## Phase 4: Linear Algebra Python Layer
+## Day 3: N-D Slicing and Generalized Broadcasting Engine
 
-### 4.1 Wrappers (`wowml/linalg/`)
-- [ ] `decompositions.py` — call C kernel, return Python Tensors for LU, QR, SVD, Cholesky, Eigh
-- [ ] `solve.py` — `solve(A, b)` and `inv(A)` via C kernel
-- [ ] `norms.py` — `norm()`, `det()`, `trace()` via C kernel
-- [ ] Add autograd support for differentiable linalg ops (solve, cholesky, svd) — stretch goal
+- [ ] **3.1 Zero-Copy Strided Slicing**
+  - Path: [`csrc/src/tensor.c`](file:///c:/vs_code/wowml/csrc/src/tensor.c)
+  - Tasks: Implement `wowml_tensor_slice(view, src, dim, start, end, step)`.
+  - Acceptance Criteria: Modifies `view->data` pointer offset and `view->strides[dim]` without allocating a new buffer; `owns_data` is 0.
 
----
+- [ ] **3.2 NumPy-Style Shape Broadcasting**
+  - Path: [`csrc/src/tensor.c`](file:///c:/vs_code/wowml/csrc/src/tensor.c)
+  - Tasks: Implement `wowml_broadcast_shapes` and `wowml_tensor_broadcast_to`.
+  - Acceptance Criteria: Supports prepending 1-dimensions and expanding dimensions with stride 0.
 
-## Phase 5: Neural Network Module
-
-### 5.1 Parameter & Module (`wowml/nn/parameter.py`, `wowml/nn/module.py`)
-- [ ] Verify `Parameter` auto-registers in `Module._parameters` via `__setattr__`
-- [ ] Add `Module.state_dict()` / `Module.load_state_dict()`
-- [ ] Add `Module.to(dtype)` for casting all parameters
-
-### 5.2 Layers
-- [ ] `Linear.forward` — `x @ W.T + b` using autograd MatMul + Add
-- [ ] `Linear.__init__` — Kaiming/Xavier weight initialization via `Tensor.randn`
-- [ ] `Conv2d.forward` — im2col + matmul convolution
-- [ ] `Conv2d.__init__` — proper kernel weight initialization
-- [ ] Add `BatchNorm1d` / `BatchNorm2d` — running mean/var, affine params
-- [ ] Add `Dropout` — random zeroing during training
-- [ ] Add `Flatten` layer
-- [ ] Add `MaxPool2d` / `AvgPool2d`
-- [ ] Add `Embedding` layer
-
-### 5.3 Activations (`wowml/nn/activations.py`)
-- [ ] `ReLU.forward` → `grad_ops.ReLU.apply(x)`
-- [ ] `Sigmoid.forward` → `grad_ops.Sigmoid.apply(x)`
-- [ ] `Tanh.forward` → `grad_ops.Tanh.apply(x)`
-- [ ] `Softmax.forward` — exp(x - max) / sum(exp(x - max))
-- [ ] Add `LeakyReLU`, `GELU`, `SiLU`
-
-### 5.4 Loss Functions (`wowml/nn/loss.py`)
-- [ ] `MSELoss.forward` — `((pred - target) ** 2).mean()`
-- [ ] `CrossEntropyLoss.forward` — log-softmax + NLL
-- [ ] Add `L1Loss`, `BCELoss`, `BCEWithLogitsLoss`
-
-### 5.5 Containers (`wowml/nn/container.py`)
-- [ ] Verify `Sequential` correctly chains modules
-- [ ] Verify `ModuleList` registers children for `parameters()`
+- [ ] **3.3 Tensor Test Verification**
+  - Path: [`csrc/tests/test_tensor.c`](file:///c:/vs_code/wowml/csrc/tests/test_tensor.c)
+  - Tasks: Build and run `ctest --output-on-failure -R test_tensor`.
+  - Acceptance Criteria: All tensor allocation, slicing, view, and broadcast checks pass.
 
 ---
 
-## Phase 6: Optimizers
+## Day 4: Element-Wise Math, Reductions, and Unary Operators
 
-### 6.1 SGD (`wowml/optim/sgd.py`)
-- [ ] Implement basic SGD: `p.data -= lr * p.grad`
-- [ ] Add momentum: velocity buffer per parameter
-- [ ] Add weight decay (L2 regularization)
-- [ ] Add Nesterov momentum (stretch)
+- [ ] **4.1 Broadcasted Element-Wise Arithmetic**
+  - Path: [`csrc/include/wowml/ops.h`](file:///c:/vs_code/wowml/csrc/include/wowml/ops.h), [`csrc/src/ops.c`](file:///c:/vs_code/wowml/csrc/src/ops.c)
+  - Tasks: Implement `wowml_add`, `wowml_sub`, `wowml_mul`, and `wowml_div` with broadcasting and dtype dispatch.
+  - Acceptance Criteria: Operations handle scalar, same-shape, and broadcasted inputs with zero buffer leaks.
 
-### 6.2 Adam (`wowml/optim/adam.py`)
-- [ ] Implement Adam with bias correction
-- [ ] First moment (m) and second moment (v) buffers
-- [ ] `m_hat = m / (1 - β1^t)`, `v_hat = v / (1 - β2^t)`
-- [ ] `p -= lr * m_hat / (√v_hat + ε)`
-- [ ] Add weight decay (AdamW variant)
+- [ ] **4.2 Unary Mathematical Operations**
+  - Path: [`csrc/src/ops.c`](file:///c:/vs_code/wowml/csrc/src/ops.c)
+  - Tasks: Implement `wowml_neg`, `wowml_exp`, `wowml_log`, `wowml_relu`, `wowml_sigmoid`, `wowml_tanh_op`, `wowml_sqrt`, and `wowml_pow_op`.
+  - Acceptance Criteria: Correct element-wise numerical outputs matching standard IEEE math.
 
-### 6.3 Additional Optimizers (stretch)
-- [ ] Add `RMSprop`
-- [ ] Add `Adagrad`
-- [ ] Add learning rate schedulers (`StepLR`, `CosineAnnealingLR`)
+- [ ] **4.3 Multi-Dimensional Reductions**
+  - Path: [`csrc/src/ops.c`](file:///c:/vs_code/wowml/csrc/src/ops.c)
+  - Tasks: Implement `wowml_sum`, `wowml_mean`, `wowml_max`, and `wowml_min` with `axis` and `keepdims` support.
+  - Acceptance Criteria: Axis-specific and global reductions match NumPy reference outputs.
 
----
-
-## Phase 7: Data Pipeline
-
-### 7.1 Dataset (`wowml/data/dataset.py`)
-- [ ] Verify abstract base class contract (`__len__`, `__getitem__`)
-- [ ] Add `TensorDataset(x, y)` — wraps two tensors as a dataset
-
-### 7.2 DataLoader (`wowml/data/dataloader.py`)
-- [ ] Implement `_collate` — stack list of samples into batched Tensors
-- [ ] Add `drop_last` option
-- [ ] Add multi-worker loading (stretch — use `multiprocessing`)
-- [ ] Add `Sampler` base class and `RandomSampler`
+- [ ] **4.4 Ops Test Harness**
+  - Path: [`csrc/tests/test_ops.c`](file:///c:/vs_code/wowml/csrc/tests/test_ops.c)
+  - Tasks: Run `ctest --output-on-failure -R test_ops`.
+  - Acceptance Criteria: Passes arithmetic, unary math, and reduction test cases.
 
 ---
 
-## Phase 8: Testing & Validation
+## Day 5: Matrix Multiplication, OpenMP Tiling, and BLAS Dispatch
 
-### 8.1 C Tests
-- [ ] Comprehensive tensor tests (all creation, access, shape ops)
-- [ ] Ops tests with known inputs/outputs
-- [ ] Matmul correctness (compare with naive Python)
-- [ ] Linalg tests: verify decompositions reconstruct the input
-  - LU: `P @ L @ U ≈ A`
-  - QR: `Q @ R ≈ A`, `Q^T @ Q ≈ I`
-  - SVD: `U @ diag(S) @ V^T ≈ A`
-  - Cholesky: `L @ L^T ≈ A`
+- [ ] **5.1 Pure C11 Blocked MatMul**
+  - Path: [`csrc/include/wowml/matmul.h`](file:///c:/vs_code/wowml/csrc/include/wowml/matmul.h), [`csrc/src/matmul.c`](file:///c:/vs_code/wowml/csrc/src/matmul.c)
+  - Tasks: Implement `wowml_matmul_c` using cache-friendly loop blocking (e.g., $32 \times 32$ tiles) and OpenMP `#pragma omp parallel for`.
+  - Acceptance Criteria: Correct results for arbitrary matrix sizes $(M, K) \times (K, N)$.
 
-### 8.2 Python Tests
-- [ ] `test_tensor.py` — creation, arithmetic, shape ops end-to-end through C
-- [ ] `test_autograd.py` — gradient correctness for every op
-- [ ] Numerical gradient checking: `(f(x+h) - f(x-h)) / 2h ≈ autograd grad`
-- [ ] `test_linalg.py` — decomposition results against numpy
-- [ ] `test_nn.py` — Linear, Conv2d forward shapes; loss function values
-- [ ] `test_optim.py` — verify SGD/Adam converge on simple quadratic loss
+- [ ] **5.2 OpenBLAS Fast Path Integration**
+  - Path: [`csrc/src/matmul.c`](file:///c:/vs_code/wowml/csrc/src/matmul.c)
+  - Tasks: Implement `wowml_matmul_blas` calling `cblas_dgemm` / `cblas_sgemm` when compiled with `-DWOWML_USE_BLAS=1`.
+  - Acceptance Criteria: Automatic fallback to pure C11 kernel when BLAS is disabled or shapes are non-contiguous.
+
+- [ ] **5.3 Batched Matmul (`bmm`), Matrix-Vector, and Dot Product**
+  - Path: [`csrc/src/matmul.c`](file:///c:/vs_code/wowml/csrc/src/matmul.c)
+  - Tasks: Implement `wowml_bmm` for 3D tensors $(B, M, K) \times (B, K, N)$, `wowml_matvec`, and `wowml_dot`.
+  - Acceptance Criteria: High-throughput batch matrix multiplication verified via [`csrc/tests/test_matmul.c`](file:///c:/vs_code/wowml/csrc/tests/test_matmul.c).
 
 ---
 
-## Phase 9: Integration & Examples
+## Day 6: Linear Algebra Decompositions and System Solvers
 
-### 9.1 End-to-end examples
-- [ ] `examples/basic_tensor.py` — create tensors, do arithmetic, print results
-- [ ] `examples/linear_regression.py` — full train loop: data → model → loss → backward → step
-- [ ] `examples/mnist.py` — MLP on MNIST with DataLoader, train/eval loop, accuracy reporting
+- [ ] **6.1 LU Decomposition, Determinant, and Matrix Inversion**
+  - Path: [`csrc/include/wowml/linalg.h`](file:///c:/vs_code/wowml/csrc/include/wowml/linalg.h), [`csrc/src/linalg.c`](file:///c:/vs_code/wowml/csrc/src/linalg.c)
+  - Tasks: Implement `wowml_linalg_lu` (Doolittle with partial pivoting), `wowml_linalg_det`, and `wowml_linalg_inv`.
+  - Acceptance Criteria: Reconstructs $PA = LU$; accurately inverts non-singular square matrices.
 
-### 9.2 Build & CI
-- [ ] Verify CMake + setup.py builds on Windows (MSVC), Linux (gcc), macOS (clang)
-- [ ] Add GitHub Actions CI: build C → run C tests → pip install → run Python tests
-- [ ] Generate test coverage reports
+- [ ] **6.2 Linear System Solver (`solve`)**
+  - Path: [`csrc/src/linalg.c`](file:///c:/vs_code/wowml/csrc/src/linalg.c)
+  - Tasks: Implement `wowml_linalg_solve` for $Ax = b$ via forward and backward substitution.
+  - Acceptance Criteria: $\|Ax - b\| < 10^{-6}$.
 
----
-
-## Phase 10: Performance & Polish (Stretch Goals)
-
-### 10.1 C Kernel Optimization
-- [ ] Tiled/blocked matmul for cache efficiency
-- [ ] SIMD vectorization (SSE4/AVX2) for element-wise ops and matmul inner loop
-- [ ] OpenMP threading for large tensor ops
-- [ ] Optional BLAS backend (link to OpenBLAS/MKL if available)
-
-### 10.2 Python API Polish
-- [ ] Pretty-print tensors (formatted matrix display, truncation for large tensors)
-- [ ] `Tensor.to(dtype)` — dtype casting
-- [ ] Slicing / indexing support (`tensor[0, :, 2:5]`)
-- [ ] `Tensor.contiguous()` — compact non-contiguous views
-
-### 10.3 Additional Features
-- [ ] Serialization: custom binary format (replace pickle)
-- [ ] GPU backend (CUDA/OpenCL) — future major milestone
-- [ ] RNN / LSTM layers
-- [ ] Attention / Transformer layers
-- [ ] `autograd.grad()` — compute gradients without accumulating on `.grad`
-- [ ] Higher-order gradients (grad of grad)
-- [ ] Computation graph visualization (export to Graphviz DOT)
+- [ ] **6.3 QR, Cholesky, Eigenvalues (`eigh`), and SVD**
+  - Path: [`csrc/src/linalg.c`](file:///c:/vs_code/wowml/csrc/src/linalg.c)
+  - Tasks: Implement Householder `qr`, Cholesky-Banachiewicz `cholesky`, Jacobi `eigh`, and `svd` with LAPACKE fast paths.
+  - Acceptance Criteria: Verified via [`csrc/tests/test_linalg.c`](file:///c:/vs_code/wowml/csrc/tests/test_linalg.c) against known matrix factorizations.
 
 ---
 
-## Dependency Graph
+## Day 7: Fused Neural Network Kernels & im2col / col2im
 
-Shows which phases must complete before others can begin:
+- [ ] **7.1 Fused Linear + Bias + ReLU Kernel**
+  - Path: [`csrc/include/wowml/ops.h`](file:///c:/vs_code/wowml/csrc/include/wowml/ops.h), [`csrc/src/ops.c`](file:///c:/vs_code/wowml/csrc/src/ops.c)
+  - Tasks: Implement `wowml_fused_linear_bias_relu(out, x, weight, bias)`.
+  - Acceptance Criteria: Executes $x W^T + b$ and $\max(0, \cdot)$ in a single memory pass without intermediate allocation.
 
-```
-Phase 1 (C Kernel)
-  │
-  ├──► Phase 2 (Bindings)
-  │       │
-  │       ├──► Phase 3 (Autograd)
-  │       │       │
-  │       │       ├──► Phase 5 (NN Module)
-  │       │       │       │
-  │       │       │       ├──► Phase 6 (Optimizers)
-  │       │       │       │       │
-  │       │       │       │       └──► Phase 9 (Examples)
-  │       │       │       │
-  │       │       │       └──► Phase 7 (Data Pipeline)
-  │       │       │
-  │       │       └──► Phase 8 (Testing) ◄── all phases
-  │       │
-  │       └──► Phase 4 (Linalg Python)
-  │
-  └──► Phase 10 (Optimization) ← can start any time after Phase 1
-```
+- [ ] **7.2 Numerically Stable Fused Cross Entropy**
+  - Path: [`csrc/src/ops.c`](file:///c:/vs_code/wowml/csrc/src/ops.c)
+  - Tasks: Implement `wowml_fused_cross_entropy` computing loss and softmax gradients simultaneously.
+  - Acceptance Criteria: Uses max-subtraction trick to avoid floating-point overflow.
+
+- [ ] **7.3 2D Convolution Helpers: `im2col` & `col2im`**
+  - Path: [`csrc/src/ops.c`](file:///c:/vs_code/wowml/csrc/src/ops.c)
+  - Tasks: Implement `wowml_im2col` and backward `wowml_col2im` with support for padding, strides, and dilations.
+  - Acceptance Criteria: Correct column matrix representation of image patches.
+
+---
+
+## Day 8: ctypes Python Bridge & Zero-Copy Memory Interoperability
+
+- [ ] **8.1 ctypes Function & Struct Signatures**
+  - Path: [`wowml/_C/_bindings.py`](file:///c:/vs_code/wowml/wowml/_C/_bindings.py)
+  - Tasks: Declare `argtypes`, `restype`, and error status checking for all C functions.
+  - Acceptance Criteria: Raises Python `RuntimeError` on C errors with clear messages.
+
+- [ ] **8.2 Python Tensor Interop & NumPy Exchange**
+  - Path: [`wowml/tensor.py`](file:///c:/vs_code/wowml/wowml/tensor.py)
+  - Tasks: Wire `Tensor` creation, shape, strides, indexing, `numpy()`, and `tolist()` to the C kernel.
+  - Acceptance Criteria: Zero-copy wrapping of NumPy arrays with `owns_data = 0`.
+
+---
+
+## Day 9: Autograd Engine & Core Differentiable Operators
+
+- [ ] **9.1 Dynamic Computational DAG & Topological Sort**
+  - Path: [`wowml/autograd/engine.py`](file:///c:/vs_code/wowml/wowml/autograd/engine.py), [`wowml/autograd/function.py`](file:///c:/vs_code/wowml/wowml/autograd/function.py)
+  - Tasks: Implement DFS topological sorting and reverse-mode `.backward()` gradient accumulation.
+  - Acceptance Criteria: Correct accumulation on leaf `.grad` tensors when multiple paths converge.
+
+- [ ] **9.2 Implement 17 Differentiable Math Operators**
+  - Path: [`wowml/autograd/grad_ops.py`](file:///c:/vs_code/wowml/wowml/autograd/grad_ops.py)
+  - Tasks: Implement forward and backward for Add, Sub, Mul, Div, Neg, MatMul, Pow, Sqrt, Exp, Log, ReLU, Sigmoid, Tanh, Sum, Mean, Reshape, and Transpose.
+  - Acceptance Criteria: Includes `_unbroadcast()` to sum out broadcasted dimensions.
+
+---
+
+## Day 10: Differentiable Linear Algebra & Advanced Autograd Features
+
+- [ ] **10.1 Differentiable Solvers (`solve`, `cholesky`, `svd`)**
+  - Path: [`wowml/autograd/linalg_ops.py`](file:///c:/vs_code/wowml/wowml/autograd/linalg_ops.py), [`wowml/linalg/`](file:///c:/vs_code/wowml/wowml/linalg/)
+  - Tasks: Implement analytical matrix derivatives for `Solve`, `Cholesky`, and `SVD`.
+  - Acceptance Criteria: Passes finite-difference numerical gradient checks in `tests/test_linalg.py`.
+
+- [ ] **10.2 Functional `autograd.grad` & Higher-Order Derivatives**
+  - Path: [`wowml/autograd/engine.py`](file:///c:/vs_code/wowml/wowml/autograd/engine.py)
+  - Tasks: Implement `grad(outputs, inputs, create_graph=True)`.
+  - Acceptance Criteria: Allows taking the derivative of a derivative (e.g., Hessian-vector products).
+
+- [ ] **10.3 Graphviz DOT Graph Export**
+  - Path: [`wowml/autograd/graph.py`](file:///c:/vs_code/wowml/wowml/autograd/graph.py)
+  - Tasks: Implement `export_dot(root, filename)`.
+  - Acceptance Criteria: Generates valid DOT file renderable by Graphviz.
+
+---
+
+## Day 11: Neural Network Architecture (`wowml.nn`)
+
+- [ ] **11.1 Module, Parameter & Serialization State**
+  - Path: [`wowml/nn/module.py`](file:///c:/vs_code/wowml/wowml/nn/module.py), [`wowml/nn/parameter.py`](file:///c:/vs_code/wowml/wowml/nn/parameter.py)
+  - Tasks: Implement `state_dict()` and `load_state_dict()` for parameter export and restore.
+  - Acceptance Criteria: All child modules and parameters are discovered and serializable.
+
+- [ ] **11.2 Layers & Normalizations**
+  - Path: [`wowml/nn/linear.py`](file:///c:/vs_code/wowml/wowml/nn/linear.py), [`wowml/nn/conv.py`](file:///c:/vs_code/wowml/wowml/nn/conv.py), [`wowml/nn/normalization.py`](file:///c:/vs_code/wowml/wowml/nn/normalization.py), [`wowml/nn/dropout.py`](file:///c:/vs_code/wowml/wowml/nn/dropout.py), [`wowml/nn/pooling.py`](file:///c:/vs_code/wowml/wowml/nn/pooling.py), [`wowml/nn/embedding.py`](file:///c:/vs_code/wowml/wowml/nn/embedding.py), [`wowml/nn/flatten.py`](file:///c:/vs_code/wowml/wowml/nn/flatten.py)
+  - Tasks: Implement forward passes connecting through autograd functions.
+  - Acceptance Criteria: Output dimensions and gradients match PyTorch reference layers.
+
+- [ ] **11.3 Activations & Losses**
+  - Path: [`wowml/nn/activations.py`](file:///c:/vs_code/wowml/wowml/nn/activations.py), [`wowml/nn/loss.py`](file:///c:/vs_code/wowml/wowml/nn/loss.py)
+  - Tasks: Implement all activations (including LeakyReLU, GELU, SiLU) and losses (MSELoss, CrossEntropyLoss, L1Loss, BCELoss, BCEWithLogitsLoss).
+  - Acceptance Criteria: Forward and backward evaluations verify against PyTorch.
+
+---
+
+## Day 12: Optimizers & Learning Rate Schedulers (`wowml.optim`)
+
+- [ ] **12.1 First-Order Optimizers**
+  - Path: [`wowml/optim/sgd.py`](file:///c:/vs_code/wowml/wowml/optim/sgd.py), [`wowml/optim/adam.py`](file:///c:/vs_code/wowml/wowml/optim/adam.py), [`wowml/optim/adamw.py`](file:///c:/vs_code/wowml/wowml/optim/adamw.py), [`wowml/optim/rmsprop.py`](file:///c:/vs_code/wowml/wowml/optim/rmsprop.py), [`wowml/optim/adagrad.py`](file:///c:/vs_code/wowml/wowml/optim/adagrad.py)
+  - Tasks: Implement parameter update rules with momentum, weight decay, and buffer states.
+  - Acceptance Criteria: Optimizers minimize quadratic loss to $< 10^{-5}$ in unit tests.
+
+- [ ] **12.2 Learning Rate Schedulers**
+  - Path: [`wowml/optim/lr_scheduler.py`](file:///c:/vs_code/wowml/wowml/optim/lr_scheduler.py)
+  - Tasks: Implement `StepLR` and `CosineAnnealingLR`.
+  - Acceptance Criteria: Learning rates decay according to exact analytical schedules.
+
+---
+
+## Day 13: Data Pipeline & Custom Binary Serialization
+
+- [ ] **13.1 Datasets, Samplers, and DataLoader**
+  - Path: [`wowml/data/`](file:///c:/vs_code/wowml/wowml/data/)
+  - Tasks: Implement `Dataset`, `TensorDataset`, `SequentialSampler`, `RandomSampler`, and `DataLoader` (with `drop_last` and collation).
+  - Acceptance Criteria: Batches iterate cleanly with matching batch sizes.
+
+- [ ] **13.2 Custom Binary Format without Pickle**
+  - Path: [`wowml/utils/serialization.py`](file:///c:/vs_code/wowml/wowml/utils/serialization.py)
+  - Tasks: Implement magic header `WOWML01`, schema metadata, and raw float buffer dumping/loading.
+  - Acceptance Criteria: Secure, fast file round-trip saving and restoring models and tensors.
+
+---
+
+## Day 14: Pytest Suite, Benchmarks vs PyTorch/JAX & Release Verification
+
+- [ ] **14.1 Full Pytest Test Suite**
+  - Path: [`tests/`](file:///c:/vs_code/wowml/tests/)
+  - Tasks: Run `pytest tests/ -v` covering tensors, numerical gradient checks, linalg, nn, optim, data, and serialization.
+  - Acceptance Criteria: 100% test pass rate.
+
+- [ ] **14.2 Performance Benchmarking Suite vs PyTorch & JAX**
+  - Path: [`benchmarks/`](file:///c:/vs_code/wowml/benchmarks/)
+  - Tasks: Run `bench_matmul.py`, `bench_autograd.py`, `bench_linalg.py`, and `bench_mlp.py`.
+  - Acceptance Criteria: CPU throughput meets or exceeds PyTorch reference benchmarks on equivalent matrix sizes.
+
+- [ ] **14.3 End-to-End Runnable Examples**
+  - Path: [`examples/linear_regression.py`](file:///c:/vs_code/wowml/examples/linear_regression.py), [`examples/mnist.py`](file:///c:/vs_code/wowml/examples/mnist.py)
+  - Tasks: Verify training convergence on synthetic regression and MNIST handwritten digit classification.
+  - Acceptance Criteria: Both scripts execute from terminal without error and achieve expected convergence.

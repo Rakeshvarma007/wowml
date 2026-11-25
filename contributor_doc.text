@@ -10,7 +10,7 @@ TABLE OF CONTENTS
 --------------------------------------------------------------------------------
 1. PROJECT OVERVIEW & ARCHITECTURE
 2. WHAT WAS ALREADY COMPLETED & HOW
-3. WHAT NEEDS TO BE DONE & HOW (STEP-BY-STEP IMPLEMENTATION GUIDE)
+3. WHAT NEEDS TO BE DONE & HOW
 4. ENVIRONMENT SETUP & BUILD WORKFLOW
 5. CRITICAL DESIGN RULES & CONVENTIONS
 6. QUICK REFERENCE: FILE MAP & ROLES
@@ -19,7 +19,7 @@ TABLE OF CONTENTS
 1. PROJECT OVERVIEW & ARCHITECTURE
 ================================================================================
 
-WowML is an educational, production-structured machine learning library written
+WowML is an educational machine learning library written
 from scratch in Python with a high-performance C kernel. It follows a modular design
 reminiscent of PyTorch, organized into three primary layers:
 

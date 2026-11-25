@@ -1,5 +1,5 @@
 /**
- * error.c — Error handling implementation.
+ * error.c — Error handling and status string implementation.
  */
 #include "wowml/error.h"
 #include <stdio.h>
@@ -15,10 +15,13 @@ static const char* status_strings[] = {
     "Invalid dtype",
     "Singular matrix",
     "Invalid argument",
+    "Not implemented"
 };
 
 const char* wowml_status_string(wowml_status_t status) {
-    if (status < 0 || status > WOWML_ERR_INVALID_ARGUMENT) return "Unknown";
+    if (status < 0 || status > WOWML_ERR_NOT_IMPLEMENTED) {
+        return "Unknown";
+    }
     return status_strings[status];
 }
 

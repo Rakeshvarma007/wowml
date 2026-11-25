@@ -1,0 +1,168 @@
+================================================================================
+WOWML DEVELOPER ONBOARDING & 14-DAY TECHNICAL ROADMAP (devhelp.text)
+================================================================================
+
+Welcome to WowML! This document is the comprehensive onboarding guide for developers
+joining the project. It describes our hybrid C11 + BLAS architecture, completed
+scaffolding, and day-by-day implementation roadmap.
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. ARCHITECTURAL OVERVIEW & HYBRID C11 + BLAS STRATEGY
+2. WHAT WAS COMPLETED IN SKELETON REFACTORING
+3. 14-DAY FULL-SCOPE IMPLEMENTATION ROADMAP
+4. MEMORY OWNERSHIP, SLICING & STRIDE RULES
+5. BUILD, TEST & BENCHMARK INSTRUCTIONS
+
+================================================================================
+1. ARCHITECTURAL OVERVIEW & HYBRID C11 + BLAS STRATEGY
+================================================================================
+
+WowML is built to deliver complete feature coverage and high CPU performance,
+targeting CPU parity with PyTorch and JAX through:
+
+1. Layer 0 (C Kernel, `csrc/`):
+   - Pure C11 portable core for memory allocation, strided indexing, views, and math.
+   - 64-byte aligned SIMD allocations (`wowml_aligned_alloc`) and scratchpad arena allocator.
+   - Dual-path execution: Pure C11 tiled reference kernels + OpenBLAS/LAPACKE fast paths.
+   - OpenMP parallelized loops across batches and matrix tiles.
+   - Fused kernels for neural networks: `wowml_fused_linear_bias_relu` and `wowml_fused_cross_entropy`.
+   - C-level `wowml_im2col` and `wowml_col2im` for high-throughput 2D convolutions.
+
+2. Layer 1 (ctypes Bridge, `wowml/_C/`):
+   - Zero-overhead dynamic loading of `wowml_c.dll` / `libwowml_c.so`.
+   - Explicit `owns_data` tracking allowing zero-copy sharing between NumPy and C.
+
+3. Layer 2 (Autograd Engine, `wowml/autograd/`):
+   - Reverse-mode automatic differentiation over dynamic computation graphs.
+   - Graph traversal via topological sort, support for higher-order derivatives (`create_graph`),
+     `autograd.grad()`, `no_grad()` contexts, and Graphviz DOT graph export.
+   - Differentiable linear algebra operations (`solve`, `cholesky`, `svd`).
+
+4. Layer 3 (High-Level Python Framework, `wowml/`):
+   - `wowml.nn`: Modules, Parameters, Conv2d, Linear, Normalizations, Losses, Activations.
+   - `wowml.optim`: SGD, Adam, AdamW, RMSprop, Adagrad, and LR Schedulers.
+   - `wowml.data`: Dataset, TensorDataset, Samplers, and multi-worker DataLoader.
+   - `wowml.utils`: Custom binary model serialization format without pickle vulnerabilities.
+
+================================================================================
+2. WHAT WAS COMPLETED IN SKELETON REFACTORING
+================================================================================
+
+All code and headers have been structured as clean, non-implemented stubs:
+- CMakeLists.txt: Configured with `-O3 -march=native` / `/arch:AVX2`, OpenMP, `WOWML_USE_BLAS`,
+  and 4 C unit test targets (`test_tensor`, `test_ops`, `test_matmul`, `test_linalg`).
+- C Headers (`csrc/include/wowml/*.h`): Full API declarations for error handling, 64-byte aligned
+  and arena memory, N-D slicing, broadcasting, im2col, fused kernels, matmul, and LAPACKE routines.
+- C Sources (`csrc/src/*.c`): Clean function stubs returning `WOWML_ERR_NOT_IMPLEMENTED`.
+- C Tests (`csrc/tests/*.c`): Standalone test harnesses for all four C components.
+- Python Modules (`wowml/**/*.py`): Clean signatures and classes raising `NotImplementedError`.
+- Benchmarks (`benchmarks/*.py`): Benchmarking suite stubs comparing against PyTorch and JAX.
+- CI Workflow (`.github/workflows/ci.yml`): Multi-platform CI pipeline across Ubuntu, Windows, macOS.
+
+================================================================================
+3. 14-DAY FULL-SCOPE IMPLEMENTATION ROADMAP
+================================================================================
+
+Day 1: Memory Management, Alignments, and Error Infrastructure
+  - Files: `csrc/src/error.c`, `csrc/src/memory.c`, `csrc/src/dtype.c`
+  - Goals: Implement `wowml_alloc`, `wowml_aligned_alloc` (64-byte alignment), arena allocator,
+    and verify via `csrc/tests/test_tensor.c`.
+
+Day 2: Tensor Core, Row-Major Strides, and Zero-Copy Views
+  - Files: `csrc/src/tensor.c`
+  - Goals: Row-major stride calculations, `wowml_tensor_alloc`, `wowml_tensor_free`,
+    `wowml_tensor_clone`, `reshape`, `transpose`, and `contiguous`.
+
+Day 3: N-D Slicing and Generalized Broadcasting Engine
+  - Files: `csrc/src/tensor.c`
+  - Goals: Implement `wowml_tensor_slice` (offset calculation + stride update) and
+    `wowml_broadcast_shapes` / `wowml_tensor_broadcast_to` (0-stride expansion).
+
+Day 4: Element-Wise Math, Reductions, and Unary Operators
+  - Files: `csrc/src/ops.c`, `csrc/tests/test_ops.c`
+  - Goals: Dtype-dispatch macros, broadcasted arithmetic (+, -, *, /), unary ops
+    (neg, exp, log, sqrt, relu, sigmoid, tanh), and reductions (sum, mean, max, min).
+
+Day 5: Matrix Multiplication, OpenMP Tiling, and BLAS Dispatch
+  - Files: `csrc/src/matmul.c`, `csrc/tests/test_matmul.c`
+  - Goals: Pure C11 blocked matrix multiply, OpenMP parallel loops, cblas_dgemm/sgemm fast paths,
+    and batched matrix multiplication (`bmm`).
+
+Day 6: Linear Algebra Decompositions and System Solvers
+  - Files: `csrc/src/linalg.c`, `csrc/tests/test_linalg.c`
+  - Goals: LU factoring with partial pivoting, forward/backward substitution solver, matrix inverse,
+    determinant, trace, norms, QR, Cholesky, and SVD with LAPACKE fast paths.
+
+Day 7: Fused Neural Network Kernels & im2col / col2im
+  - Files: `csrc/src/ops.c`
+  - Goals: Fused linear + bias + relu kernel, numerically stable fused cross entropy,
+    and im2col / col2im for 2D convolutions.
+
+Day 8: ctypes Python Bridge & Zero-Copy Memory Interoperability
+  - Files: `wowml/_C/_bindings.py`, `wowml/tensor.py`
+  - Goals: Bind all C functions via ctypes, verify zero-copy NumPy wrapping with `owns_data`.
+
+Day 9: Autograd Engine & Core Differentiable Operators
+  - Files: `wowml/autograd/engine.py`, `wowml/autograd/grad_ops.py`
+  - Goals: Topological sorting, backward pass, and forward/backward for all 17 element-wise ops.
+
+Day 10: Differentiable Linear Algebra & Advanced Autograd Features
+  - Files: `wowml/autograd/linalg_ops.py`, `wowml/autograd/graph.py`
+  - Goals: Differentiable solve, cholesky, svd, `autograd.grad()`, higher-order gradients,
+    `no_grad()` context, and Graphviz DOT export.
+
+Day 11: Neural Network Architecture (`wowml.nn`)
+  - Files: `wowml/nn/` (all layer and container files)
+  - Goals: `Module`, `Parameter`, `Linear`, `Conv2d` (via im2col), `BatchNorm1d/2d`, `Dropout`,
+    `MaxPool2d`, `AvgPool2d`, `Embedding`, `Flatten`, all activations, and losses.
+
+Day 12: Optimizers & Learning Rate Schedulers (`wowml.optim`)
+  - Files: `wowml/optim/` (all optimizer and scheduler files)
+  - Goals: SGD with Nesterov and momentum, Adam, AdamW, RMSprop, Adagrad, StepLR, CosineAnnealingLR.
+
+Day 13: Data Pipeline & Custom Binary Serialization
+  - Files: `wowml/data/`, `wowml/utils/serialization.py`
+  - Goals: Dataset, TensorDataset, Samplers, multi-worker DataLoader, and secure binary model
+    serialization without pickle.
+
+Day 14: Pytest Suite, Benchmarks vs PyTorch/JAX & Release Verification
+  - Files: `tests/`, `benchmarks/`, `examples/`
+  - Goals: End-to-end testing, finite-difference gradient checks, CPU benchmarks vs PyTorch/JAX,
+    and runnable examples (Linear Regression & MNIST).
+
+================================================================================
+4. MEMORY OWNERSHIP, SLICING & STRIDE RULES
+================================================================================
+
+1. `owns_data == 1`: The tensor owns its buffer. `wowml_tensor_free` calls `wowml_free`.
+2. `owns_data == 0`: The tensor is a view (slice, transpose, broadcast, or NumPy buffer).
+   `wowml_tensor_free` frees metadata only, never the raw data pointer.
+3. Slicing formula:
+   $$\text{offset} = \text{start} \times \text{stride}[\text{dim}]$$
+   $$\text{new\_stride}[\text{dim}] = \text{step} \times \text{stride}[\text{dim}]$$
+   $$\text{new\_shape}[\text{dim}] = \lceil (\text{end} - \text{start}) / \text{step} \rceil$$
+
+================================================================================
+5. BUILD, TEST & BENCHMARK INSTRUCTIONS
+================================================================================
+
+Build C Kernel:
+  cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+  cmake --build build --config Release
+
+Run C Tests:
+  cd build && ctest --output-on-failure -C Release && cd ..
+
+Install in Editable Mode:
+  pip install -e ".[dev]"
+
+Run Python Tests:
+  pytest tests/ -v
+
+Run Benchmarks:
+  python benchmarks/bench_matmul.py
+  python benchmarks/bench_autograd.py
+  python benchmarks/bench_mlp.py
+================================================================================

@@ -19,3 +19,15 @@ class Softmax(Module):
         super().__init__()
         self.dim = dim
     def forward(self, x: Tensor) -> Tensor: raise NotImplementedError
+
+class LeakyReLU(Module):
+    def __init__(self, negative_slope: float = 0.01):
+        super().__init__()
+        self.negative_slope = negative_slope
+    def forward(self, x: Tensor) -> Tensor: raise NotImplementedError
+
+class GELU(Module):
+    def forward(self, x: Tensor) -> Tensor: raise NotImplementedError
+
+class SiLU(Module):
+    def forward(self, x: Tensor) -> Tensor: raise NotImplementedError

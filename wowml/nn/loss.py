@@ -6,12 +6,21 @@ from wowml.tensor import Tensor
 
 
 class MSELoss(Module):
-    """Mean Squared Error loss."""
     def forward(self, prediction: Tensor, target: Tensor) -> Tensor:
         raise NotImplementedError
 
-
 class CrossEntropyLoss(Module):
-    """Cross-entropy loss (log-softmax + NLL)."""
+    def forward(self, logits: Tensor, targets: Tensor) -> Tensor:
+        raise NotImplementedError
+
+class L1Loss(Module):
+    def forward(self, prediction: Tensor, target: Tensor) -> Tensor:
+        raise NotImplementedError
+
+class BCELoss(Module):
+    def forward(self, prediction: Tensor, target: Tensor) -> Tensor:
+        raise NotImplementedError
+
+class BCEWithLogitsLoss(Module):
     def forward(self, logits: Tensor, targets: Tensor) -> Tensor:
         raise NotImplementedError

@@ -1,35 +1,36 @@
 """
-dataloader.py — DataLoader for batching and iterating over datasets.
+dataloader.py — DataLoader supporting multi-worker loading, shuffling, and drop_last.
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING
-import random
+from typing import Optional, Callable, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from wowml.data.dataset import Dataset
+    from wowml.data.sampler import Sampler
 
 
 class DataLoader:
-    def __init__(self, dataset: "Dataset", batch_size: int = 1, shuffle: bool = False):
+    def __init__(
+        self,
+        dataset: Dataset,
+        batch_size: int = 1,
+        shuffle: bool = False,
+        sampler: Optional[Sampler] = None,
+        num_workers: int = 0,
+        collate_fn: Optional[Callable] = None,
+        drop_last: bool = False,
+    ):
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.sampler = sampler
+        self.num_workers = num_workers
+        self.collate_fn = collate_fn
+        self.drop_last = drop_last
 
     def __iter__(self):
-        indices = list(range(len(self.dataset)))
-        if self.shuffle:
-            random.shuffle(indices)
-        batch = []
-        for idx in indices:
-            batch.append(self.dataset[idx])
-            if len(batch) == self.batch_size:
-                yield self._collate(batch)
-                batch = []
-        if batch:
-            yield self._collate(batch)
+        # TODO: Implement batch generator with optional multi-worker multiprocessing stub
+        raise NotImplementedError
 
-    def _collate(self, batch):
-        """TODO: stack samples into Tensors."""
-        return batch
-
-    def __len__(self):
-        return (len(self.dataset) + self.batch_size - 1) // self.batch_size
+    def __len__(self) -> int:
+        raise NotImplementedError
