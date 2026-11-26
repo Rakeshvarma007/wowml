@@ -41,6 +41,8 @@ static wowml_status_t binary_op_impl(wowml_tensor_t* out, const wowml_tensor_t* 
     if (same_shape && wowml_tensor_is_contiguous(a) && wowml_tensor_is_contiguous(b) &&
         wowml_tensor_is_contiguous(out)) {
         int64_t n = out->numel;
+        int n_int = (int)n;
+        int i;
         if (out->dtype == WOWML_FLOAT32) {
             const float* pa = (const float*)a->data;
             const float* pb = (const float*)b->data;
@@ -48,19 +50,19 @@ static wowml_status_t binary_op_impl(wowml_tensor_t* out, const wowml_tensor_t* 
             switch (op) {
                 case OP_ADD:
                     #pragma omp parallel for if (n > 32768)
-                    for (int i = 0; i < (int)n; i++) po[i] = pa[i] + pb[i];
+                    for (i = 0; i < n_int; i++) po[i] = pa[i] + pb[i];
                     break;
                 case OP_SUB:
                     #pragma omp parallel for if (n > 32768)
-                    for (int i = 0; i < (int)n; i++) po[i] = pa[i] - pb[i];
+                    for (i = 0; i < n_int; i++) po[i] = pa[i] - pb[i];
                     break;
                 case OP_MUL:
                     #pragma omp parallel for if (n > 32768)
-                    for (int i = 0; i < (int)n; i++) po[i] = pa[i] * pb[i];
+                    for (i = 0; i < n_int; i++) po[i] = pa[i] * pb[i];
                     break;
                 case OP_DIV:
                     #pragma omp parallel for if (n > 32768)
-                    for (int i = 0; i < (int)n; i++) po[i] = pa[i] / pb[i];
+                    for (i = 0; i < n_int; i++) po[i] = pa[i] / pb[i];
                     break;
             }
             return WOWML_OK;
@@ -71,19 +73,19 @@ static wowml_status_t binary_op_impl(wowml_tensor_t* out, const wowml_tensor_t* 
             switch (op) {
                 case OP_ADD:
                     #pragma omp parallel for if (n > 32768)
-                    for (int i = 0; i < (int)n; i++) po[i] = pa[i] + pb[i];
+                    for (i = 0; i < n_int; i++) po[i] = pa[i] + pb[i];
                     break;
                 case OP_SUB:
                     #pragma omp parallel for if (n > 32768)
-                    for (int i = 0; i < (int)n; i++) po[i] = pa[i] - pb[i];
+                    for (i = 0; i < n_int; i++) po[i] = pa[i] - pb[i];
                     break;
                 case OP_MUL:
                     #pragma omp parallel for if (n > 32768)
-                    for (int i = 0; i < (int)n; i++) po[i] = pa[i] * pb[i];
+                    for (i = 0; i < n_int; i++) po[i] = pa[i] * pb[i];
                     break;
                 case OP_DIV:
                     #pragma omp parallel for if (n > 32768)
-                    for (int i = 0; i < (int)n; i++) po[i] = pa[i] / pb[i];
+                    for (i = 0; i < n_int; i++) po[i] = pa[i] / pb[i];
                     break;
             }
             return WOWML_OK;
@@ -98,12 +100,14 @@ static wowml_status_t binary_op_impl(wowml_tensor_t* out, const wowml_tensor_t* 
                 WOWML_ERR_SHAPE_MISMATCH);
 
     int64_t n = out->numel;
+    int n_int = (int)n;
+    int i;
     if (out->dtype == WOWML_FLOAT32) {
         const float* pa = (const float*)va.data;
         const float* pb = (const float*)vb.data;
         float* po = (float*)out->data;
         #pragma omp parallel for if (n > 32768)
-        for (int i = 0; i < (int)n; i++) {
+        for (i = 0; i < n_int; i++) {
             int64_t oa = strided_offset(i, out->ndim, out->shape, va.strides);
             int64_t ob = strided_offset(i, out->ndim, out->shape, vb.strides);
             int64_t oo = strided_offset(i, out->ndim, out->shape, out->strides);
@@ -116,7 +120,7 @@ static wowml_status_t binary_op_impl(wowml_tensor_t* out, const wowml_tensor_t* 
         const double* pb = (const double*)vb.data;
         double* po = (double*)out->data;
         #pragma omp parallel for if (n > 32768)
-        for (int i = 0; i < (int)n; i++) {
+        for (i = 0; i < n_int; i++) {
             int64_t oa = strided_offset(i, out->ndim, out->shape, va.strides);
             int64_t ob = strided_offset(i, out->ndim, out->shape, vb.strides);
             int64_t oo = strided_offset(i, out->ndim, out->shape, out->strides);
@@ -184,17 +188,19 @@ wowml_status_t NAME(wowml_tensor_t* out, const wowml_tensor_t* a) {             
     WOWML_CHECK(out != NULL && a != NULL, WOWML_ERR_NULL_PTR);                         \
     WOWML_CHECK(out->numel == a->numel && out->dtype == a->dtype, WOWML_ERR_SHAPE_MISMATCH); \
     int64_t n = out->numel;                                                            \
+    int n_int = (int)n;                                                                \
+    int i;                                                                             \
     if (out->dtype == WOWML_FLOAT32) {                                                 \
         const float* pa = (const float*)a->data;                                       \
         float* po = (float*)out->data;                                                 \
         _Pragma("omp parallel for if (n > 32768)")                                     \
-        for (int i = 0; i < (int)n; i++) { float x = pa[i]; po[i] = (EXPR_F32); }       \
+        for (i = 0; i < n_int; i++) { float x = pa[i]; po[i] = (EXPR_F32); }           \
         return WOWML_OK;                                                               \
     } else if (out->dtype == WOWML_FLOAT64) {                                          \
         const double* pa = (const double*)a->data;                                     \
         double* po = (double*)out->data;                                               \
         _Pragma("omp parallel for if (n > 32768)")                                     \
-        for (int i = 0; i < (int)n; i++) { double x = pa[i]; po[i] = (EXPR_F64); }      \
+        for (i = 0; i < n_int; i++) { double x = pa[i]; po[i] = (EXPR_F64); }          \
         return WOWML_OK;                                                               \
     }                                                                                  \
     return WOWML_ERR_INVALID_DTYPE;                                                    \
@@ -394,8 +400,10 @@ wowml_status_t wowml_fused_linear_bias_relu(wowml_tensor_t* out, const wowml_ten
         const float* b = bias ? (const float*)bias->data : NULL;
         float* Y = (float*)out->data;
 
+        int b_int = (int)B;
+        int i;
         #pragma omp parallel for if (B * Out > 4096)
-        for (int i = 0; i < (int)B; i++) {
+        for (i = 0; i < b_int; i++) {
             for (int64_t j = 0; j < Out; j++) {
                 float acc = b ? b[j] : 0.0f;
                 const float* x_row = X + (int64_t)i * In;
