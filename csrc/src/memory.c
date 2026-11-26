@@ -9,8 +9,11 @@
 #include <malloc.h>
 #endif
 
-static wowml_alloc_fn g_alloc = malloc;
-static wowml_free_fn  g_free  = free;
+static void* default_alloc(size_t size) { return malloc(size); }
+static void  default_free(void* ptr)    { free(ptr); }
+
+static wowml_alloc_fn g_alloc = default_alloc;
+static wowml_free_fn  g_free  = default_free;
 
 void* wowml_alloc(size_t size) {
     if (size == 0) size = 1;
@@ -34,8 +37,8 @@ void wowml_free(void* ptr) {
 }
 
 void wowml_set_allocator(wowml_alloc_fn alloc_fn, wowml_free_fn free_fn) {
-    g_alloc = alloc_fn ? alloc_fn : malloc;
-    g_free  = free_fn  ? free_fn  : free;
+    g_alloc = alloc_fn ? alloc_fn : default_alloc;
+    g_free  = free_fn  ? free_fn  : default_free;
 }
 
 void* wowml_aligned_alloc(size_t alignment, size_t size) {

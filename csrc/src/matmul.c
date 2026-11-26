@@ -6,7 +6,11 @@
 #include <string.h>
 
 #ifdef WOWML_USE_BLAS
+#ifdef __APPLE__
+#include <Accelerate/Accelerate.h>
+#else
 #include <cblas.h>
+#endif
 #endif
 
 #define TILE_M 64
@@ -46,8 +50,8 @@ wowml_status_t wowml_matmul_c(wowml_tensor_t* out, const wowml_tensor_t* a, cons
         memset(C, 0, (size_t)(M * N) * sizeof(float));
 
         #pragma omp parallel for schedule(dynamic) if (M * N * K > 32768)
-        for (int64_t i0 = 0; i0 < M; i0 += TILE_M) {
-            int64_t imax = (i0 + TILE_M < M) ? (i0 + TILE_M) : M;
+        for (int i0 = 0; i0 < (int)M; i0 += TILE_M) {
+            int64_t imax = ((int64_t)i0 + TILE_M < M) ? ((int64_t)i0 + TILE_M) : M;
             for (int64_t k0 = 0; k0 < K; k0 += TILE_K) {
                 int64_t kmax = (k0 + TILE_K < K) ? (k0 + TILE_K) : K;
                 for (int64_t j0 = 0; j0 < N; j0 += TILE_N) {
@@ -72,8 +76,8 @@ wowml_status_t wowml_matmul_c(wowml_tensor_t* out, const wowml_tensor_t* a, cons
         memset(C, 0, (size_t)(M * N) * sizeof(double));
 
         #pragma omp parallel for schedule(dynamic) if (M * N * K > 32768)
-        for (int64_t i0 = 0; i0 < M; i0 += TILE_M) {
-            int64_t imax = (i0 + TILE_M < M) ? (i0 + TILE_M) : M;
+        for (int i0 = 0; i0 < (int)M; i0 += TILE_M) {
+            int64_t imax = ((int64_t)i0 + TILE_M < M) ? ((int64_t)i0 + TILE_M) : M;
             for (int64_t k0 = 0; k0 < K; k0 += TILE_K) {
                 int64_t kmax = (k0 + TILE_K < K) ? (k0 + TILE_K) : K;
                 for (int64_t j0 = 0; j0 < N; j0 += TILE_N) {
@@ -184,9 +188,9 @@ wowml_status_t wowml_matvec(wowml_tensor_t* out, const wowml_tensor_t* a, const 
         const float* X = (const float*)x->data;
         float* Y = (float*)out->data;
         #pragma omp parallel for if (M * K > 16384)
-        for (int64_t i = 0; i < M; i++) {
+        for (int i = 0; i < (int)M; i++) {
             float acc = 0.0f;
-            for (int64_t k = 0; k < K; k++) acc += A[i * K + k] * X[k];
+            for (int64_t k = 0; k < K; k++) acc += A[(int64_t)i * K + k] * X[k];
             Y[i] = acc;
         }
         return WOWML_OK;
@@ -195,9 +199,9 @@ wowml_status_t wowml_matvec(wowml_tensor_t* out, const wowml_tensor_t* a, const 
         const double* X = (const double*)x->data;
         double* Y = (double*)out->data;
         #pragma omp parallel for if (M * K > 16384)
-        for (int64_t i = 0; i < M; i++) {
+        for (int i = 0; i < (int)M; i++) {
             double acc = 0.0;
-            for (int64_t k = 0; k < K; k++) acc += A[i * K + k] * X[k];
+            for (int64_t k = 0; k < K; k++) acc += A[(int64_t)i * K + k] * X[k];
             Y[i] = acc;
         }
         return WOWML_OK;
