@@ -58,20 +58,23 @@ When implementing a new operation or layer, follow this step-by-step pipeline:
 
 ### Building & Testing
 ```bash
-# 1. Configure CMake
+# 1. Configure CMake (add -G "MinGW Makefiles" if using MinGW-W64 on Windows)
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
 
 # 2. Build C shared library and test targets
-cmake --build build --config Release
+cmake --build build --config Release -j 8
 
-# 3. Run C test suite
+# 3. Run C test suite (test_tensor, test_ops, test_matmul, test_linalg)
 cd build && ctest --output-on-failure -C Release && cd ..
 
-# 4. Install Python package in editable mode
+# 4. Install Python package in editable mode (or run directly from repo root)
 pip install -e ".[dev]"
 
-# 5. Run Python test suite
-pytest tests/ -v
+# 5. Run Python test suite (25+ tests covering tensor, autograd, linalg, nn, optim, data, serialization)
+python -m pytest tests/ -v
+
+# 6. Run benchmarks
+python -m benchmarks.bench_matmul
 ```
 
 ---

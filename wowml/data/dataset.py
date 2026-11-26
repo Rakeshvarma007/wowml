@@ -15,12 +15,18 @@ class Dataset:
 
 class TensorDataset(Dataset):
     """Dataset wrapping tensors (e.g. features and targets)."""
+
     def __init__(self, *tensors: Tensor):
+        if not tensors:
+            raise ValueError("TensorDataset requires at least one tensor.")
+        first_len = tensors[0].shape[0]
+        for t in tensors[1:]:
+            if t.shape[0] != first_len:
+                raise ValueError(f"Size mismatch between tensors: {first_len} vs {t.shape[0]}")
         self.tensors: Tuple[Tensor, ...] = tensors
-        # TODO: Validate matching first dimension sizes stub
 
     def __len__(self) -> int:
-        raise NotImplementedError
+        return self.tensors[0].shape[0]
 
     def __getitem__(self, index: int) -> Tuple[Tensor, ...]:
-        raise NotImplementedError
+        return tuple(t[index] for t in self.tensors)

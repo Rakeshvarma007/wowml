@@ -9,3 +9,4 @@ from wowml import linalg         # noqa: F401
 from wowml import nn             # noqa: F401
 from wowml import optim          # noqa: F401
 from wowml import data           # noqa: F401
+from wowml import utils          # noqa: F401

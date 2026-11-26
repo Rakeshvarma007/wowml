@@ -3,7 +3,6 @@
  */
 #include "wowml/error.h"
 #include <stdio.h>
-#include <stdlib.h>
 
 static wowml_error_handler_t g_error_handler = NULL;
 

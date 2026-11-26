@@ -14,8 +14,29 @@ class SGD(Optimizer):
             "nesterov": nesterov,
         }
         super().__init__(params, defaults)
-        self.state = {}
 
-    def step(self):
-        # TODO: Implement SGD step stub with momentum and Nesterov
-        raise NotImplementedError
+    def step(self) -> None:
+        for group in self.param_groups:
+            lr = group["lr"]
+            mu = group["momentum"]
+            wd = group["weight_decay"]
+            nesterov = group["nesterov"]
+
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                p_arr = p.numpy()
+                g = p.grad.numpy()
+                if wd != 0.0:
+                    g = g + wd * p_arr
+                if mu != 0.0:
+                    st = self.state[id(p)]
+                    if "velocity" not in st:
+                        st["velocity"] = g.copy()
+                    else:
+                        st["velocity"][:] = mu * st["velocity"] + g
+                    buf = st["velocity"]
+                    update = (g + mu * buf) if nesterov else buf
+                else:
+                    update = g
+                p_arr -= lr * update

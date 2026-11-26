@@ -83,11 +83,14 @@ wowml/
 
 ### 1. Build the C Kernel with CMake
 ```bash
-# Configure with BLAS & OpenMP enabled
+# Configure with BLAS (optional) & OpenMP enabled
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
 
+# On Windows with MinGW-W64:
+# cmake -B build -S . -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+
 # Compile the shared library and C tests
-cmake --build build --config Release
+cmake --build build --config Release -j 8
 
 # Run C kernel unit tests
 cd build && ctest --output-on-failure -C Release && cd ..
@@ -100,14 +103,15 @@ pip install -e ".[dev]"
 
 ### 3. Run the Python Test Suite
 ```bash
-pytest tests/ -v
+python -m pytest tests/ -v
 ```
 
 ### 4. Run Benchmarks against PyTorch & JAX
 ```bash
-python benchmarks/bench_matmul.py
-python benchmarks/bench_autograd.py
-python benchmarks/bench_mlp.py
+python -m benchmarks.bench_matmul
+python -m benchmarks.bench_autograd
+python -m benchmarks.bench_linalg
+python -m benchmarks.bench_mlp
 ```
 
 ---
