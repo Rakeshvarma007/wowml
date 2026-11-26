@@ -44,16 +44,22 @@ class CMakeBuild(build_ext):
 
     def get_outputs(self):
         return [
-            os.path.join(os.path.abspath(self.build_lib), "wowml", "_C", _lib_filename())
+            os.path.join(
+                os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name))),
+                _lib_filename(),
+            )
+            for ext in self.extensions
         ]
 
     def copy_extensions_to_source(self):
         lib_name = _lib_filename()
-        src = os.path.join(self.build_lib, "wowml", "_C", lib_name)
-        if os.path.isfile(src):
+        for ext in self.extensions:
+            src = os.path.join(os.path.dirname(self.get_ext_fullpath(ext.name)), lib_name)
             dst_dir = os.path.join("wowml", "_C")
             os.makedirs(dst_dir, exist_ok=True)
-            shutil.copy2(src, os.path.join(dst_dir, lib_name))
+            dst = os.path.join(dst_dir, lib_name)
+            if os.path.isfile(src) and os.path.abspath(src) != os.path.abspath(dst):
+                shutil.copy2(src, dst)
 
 
 setup(

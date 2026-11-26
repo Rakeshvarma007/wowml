@@ -12,7 +12,7 @@ from enum import IntEnum
 from typing import Optional, Sequence, Tuple
 
 if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
-    for _dll_dir in ("C:/mingw64/bin", "C:/msys64/ucrt64/bin"):
+    for _dll_dir in ("C:/mingw64/bin", "C:/msys64/ucrt64/bin", "C:/openblas/bin"):
         if os.path.isdir(_dll_dir):
             os.add_dll_directory(_dll_dir)
 
